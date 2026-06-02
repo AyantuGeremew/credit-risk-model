@@ -1,6 +1,9 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+from sklearn.preprocessing import StandardScaler
 
 def get_dataset_shape(df):
     """
@@ -519,3 +522,512 @@ def outlier_analysis(df):
     plot_all_boxplots(df)
 
     return summary
+
+#-----------------------------------------------
+# Create Aggregate Features
+#-------------------------------------------
+
+def calculate_total_transaction_amount(df, customer_col, amount_col):
+    """
+    Calculate the total transaction amount for each customer.
+
+    Parameters:
+    ----------
+    df : pd.DataFrame
+        Input transaction data.
+    customer_col : str
+        Column containing customer IDs.
+    amount_col : str
+        Column containing transaction amounts.
+
+    Returns:
+    -------
+    pd.DataFrame
+        DataFrame with total transaction amount per customer.
+    """
+    
+    total_amount = (
+        df.groupby(customer_col)[amount_col]
+        .sum()
+        .reset_index()
+        .rename(columns={amount_col: "Total_Transaction_Amount"})
+    )
+    
+    return total_amount
+
+    def calculate_average_transaction_amount(df, customer_col, amount_col):
+    """
+    Calculate the average transaction amount for each customer.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset.
+    customer_col : str
+        Customer ID column name.
+    amount_col : str
+        Transaction amount column name.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing average transaction amount per customer.
+    """
+
+    avg_amount = (
+        df.groupby(customer_col)[amount_col]
+        .mean()
+        .reset_index()
+        .rename(columns={amount_col: "Average_Transaction_Amount"})
+    )
+
+    return avg_amount
+
+def calculate_transaction_count(df, customer_col):
+    """
+    Calculate the number of transactions for each customer.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset.
+    customer_col : str
+        Customer ID column name.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing transaction count per customer.
+    """
+
+    transaction_count = (
+        df.groupby(customer_col)
+        .size()
+        .reset_index(name="Transaction_Count")
+    )
+
+    return transaction_count
+
+def calculate_transaction_amount_std(df, customer_col, amount_col):
+    """
+    Calculate standard deviation of transaction amounts per customer.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset
+    customer_col : str
+        Customer ID column
+    amount_col : str
+        Transaction amount column
+
+    Returns
+    -------
+    pd.DataFrame
+        Standard deviation of transaction amounts per customer
+    """
+
+    std_df = (
+        df.groupby(customer_col)[amount_col]
+        .std()
+        .reset_index()
+        .rename(columns={amount_col: "Transaction_Amount_Std"})
+    )
+
+    return std_df
+
+#-----------------------------------------------
+# Extract Features
+#-------------------------------------------
+
+def extract_transaction_hour(df, datetime_col):
+    """
+    Extract hour of the day from a datetime column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset
+    datetime_col : str
+        Column containing transaction datetime
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with CustomerId (if exists) and Transaction_Hour
+    """
+
+    df_copy = df.copy()
+
+    # Ensure datetime format
+    df_copy[datetime_col] = pd.to_datetime(df_copy[datetime_col], errors="coerce")
+
+    # Extract hour
+    df_copy["Transaction_Hour"] = df_copy[datetime_col].dt.hour
+
+    return df_copy
+
+def add_transaction_hour_feature(df, datetime_col):
+    """
+    Add transaction hour feature to original dataset.
+    """
+
+    df = extract_transaction_hour(df, datetime_col)
+    return df
+
+def extract_transaction_day_of_month(df, datetime_col):
+    """
+    Extract day of the month from a datetime column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset
+    datetime_col : str
+        Column containing transaction datetime
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with a new feature: Transaction_Day_of_Month
+    """
+
+    df_copy = df.copy()
+
+    # Convert to datetime safely
+    df_copy[datetime_col] = pd.to_datetime(df_copy[datetime_col], errors="coerce")
+
+    # Extract day of month (1–31)
+    df_copy["Transaction_Day_of_Month"] = df_copy[datetime_col].dt.day
+
+    return df_copy
+
+def add_transaction_day_of_month_feature(df, datetime_col):
+    """
+    Add transaction day-of-month feature to the dataset.
+    """
+
+    return extract_transaction_day_of_month(df, datetime_col)
+
+def extract_transaction_month(df, datetime_col):
+    """
+    Extract month from a datetime column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset
+    datetime_col : str
+        Column containing transaction datetime
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with Transaction_Month feature added
+    """
+
+    df_copy = df.copy()
+
+    # Convert to datetime safely
+    df_copy[datetime_col] = pd.to_datetime(df_copy[datetime_col], errors="coerce")
+
+    # Extract month (1–12)
+    df_copy["Transaction_Month"] = df_copy[datetime_col].dt.month
+
+    return df_copy
+
+def add_transaction_month_feature(df, datetime_col):
+    """
+    Add transaction month feature to dataset.
+    """
+
+    return extract_transaction_month(df, datetime_col)
+
+def extract_transaction_year(df, datetime_col):
+    """
+    Extract year from a datetime column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset
+    datetime_col : str
+        Column containing transaction datetime
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with Transaction_Year feature added
+    """
+
+    df_copy = df.copy()
+
+    # Convert to datetime safely
+    df_copy[datetime_col] = pd.to_datetime(df_copy[datetime_col], errors="coerce")
+
+    # Extract year (e.g., 2023, 2024)
+    df_copy["Transaction_Year"] = df_copy[datetime_col].dt.year
+
+    return df_copy
+
+def add_transaction_year_feature(df, datetime_col):
+    """
+    Add transaction year feature to dataset.
+    """
+
+    return extract_transaction_year(df, datetime_col)
+
+#-----------------------------------------------
+# Encode Categorical Variables
+#-------------------------------------------  
+
+def one_hot_encode_column(df, column_name, drop_first=False):
+    """
+    Perform one-hot encoding on a categorical column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    column_name : str
+        Name of categorical column to encode
+    drop_first : bool, default=False
+        Whether to drop first category (to avoid multicollinearity)
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with one-hot encoded columns
+    """
+
+    df_copy = df.copy()
+
+    encoded_df = pd.get_dummies(
+        df_copy[column_name],
+        prefix=column_name,
+        drop_first=drop_first
+    )
+
+    df_copy = pd.concat([df_copy, encoded_df], axis=1)
+    df_copy.drop(columns=[column_name], inplace=True)
+
+    return df_copy
+
+def one_hot_encode_multiple(df, columns, drop_first=False):
+    """
+    Perform one-hot encoding on multiple categorical columns.
+    """
+
+    df_copy = df.copy()
+
+    for col in columns:
+        df_copy = one_hot_encode_column(df_copy, col, drop_first)
+
+    return df_copy
+
+def label_encode_column(df, column_name):
+    """
+    Perform label encoding on a categorical column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    column_name : str
+        Column to encode
+
+    Returns
+    -------
+    pd.DataFrame, LabelEncoder
+        Encoded DataFrame and fitted encoder
+    """
+
+    df_copy = df.copy()
+
+    encoder = LabelEncoder()
+    df_copy[column_name + "_Encoded"] = encoder.fit_transform(df_copy[column_name].astype(str))
+
+    return df_copy, encoder
+
+def label_encode_multiple(df, columns):
+    """
+    Perform label encoding on multiple categorical columns.
+
+    Returns encoded dataframe and dictionary of encoders.
+    """
+
+    df_copy = df.copy()
+    encoders = {}
+
+    for col in columns:
+        encoder = LabelEncoder()
+        df_copy[col + "_Encoded"] = encoder.fit_transform(df_copy[col].astype(str))
+        encoders[col] = encoder
+
+    return df_copy, encoders
+
+#-----------------------------------------------
+# Handling Missing Values
+#-------------------------------------------  
+
+def impute_missing_values(
+    df,
+    strategy="mean",
+    columns=None,
+    n_neighbors=5
+):
+    """
+    Unified function to handle missing value imputation.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    strategy : str
+        Imputation strategy: "mean", "median", "mode", or "knn"
+    columns : list or None
+        Columns to impute. If None, auto-select numeric columns
+    n_neighbors : int
+        Used only for KNN imputation
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with imputed values
+    """
+
+    df_copy = df.copy()
+
+    # Auto-select numeric columns if not provided
+    if columns is None:
+        columns = df_copy.select_dtypes(include="number").columns
+
+    # Mean / Median / Mode Imputation
+    if strategy in ["mean", "median", "mode"]:
+        if strategy == "mode":
+            imputer = SimpleImputer(strategy="most_frequent")
+        else:
+            imputer = SimpleImputer(strategy=strategy)
+
+        df_copy[columns] = imputer.fit_transform(df_copy[columns])
+
+    # KNN Imputation
+    elif strategy == "knn":
+        imputer = KNNImputer(n_neighbors=n_neighbors)
+        df_copy[columns] = imputer.fit_transform(df_copy[columns])
+
+    else:
+        raise ValueError("Strategy must be: 'mean', 'median', 'mode', or 'knn'")
+
+    return df_copy
+
+def remove_missing_values(
+    df,
+    axis=0,
+    how="any",
+    threshold=None,
+    subset=None
+):
+    """
+    Remove rows or columns with missing values.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    axis : int
+        0 = drop rows, 1 = drop columns
+    how : str
+        'any' -> drop if any missing
+        'all' -> drop if all missing
+    threshold : int or None
+        Require that many non-NA values to keep row/column
+    subset : list or None
+        Columns to consider when dropping rows
+
+    Returns
+    -------
+    pd.DataFrame
+        Cleaned dataset
+    """
+
+    df_copy = df.copy()
+
+    df_copy = df_copy.dropna(
+        axis=axis,
+        how=how,
+        thresh=threshold,
+        subset=subset
+    )
+
+    return df_copy
+
+def drop_missing_rows(df, how="any", subset=None):
+    """Drop rows with missing values."""
+    return remove_missing_values(df, axis=0, how=how, subset=subset)
+
+def drop_missing_columns(df, how="any", threshold=None):
+    """Drop columns with missing values."""
+    return remove_missing_values(df, axis=1, how=how, threshold=threshold)
+
+def normalize_minmax(df, columns=None):
+    """
+    Normalize selected columns to range [0, 1].
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    columns : list or None
+        Columns to normalize. If None, use all numeric columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Normalized dataset
+    """
+
+    df_copy = df.copy()
+
+    # Select numeric columns if not provided
+    if columns is None:
+        columns = df_copy.select_dtypes(include="number").columns
+
+    scaler = MinMaxScaler()
+
+    df_copy[columns] = scaler.fit_transform(df_copy[columns])
+
+    return df_copy
+
+#-----------------------------------------------
+# Normalize/Standardize Numerical Features
+#-------------------------------------------  
+
+def normalize_minmax(df, columns=None):
+    """
+    Normalize selected columns to range [0, 1].
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    columns : list or None
+        Columns to normalize. If None, use all numeric columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Normalized dataset
+    """
+
+    df_copy = df.copy()
+
+    # Select numeric columns if not provided
+    if columns is None:
+        columns = df_copy.select_dtypes(include="number").columns
+
+    scaler = MinMaxScaler()
+
+    df_copy[columns] = scaler.fit_transform(df_copy[columns])
+
+    return df_copy
