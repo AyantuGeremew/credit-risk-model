@@ -6,7 +6,7 @@ import seaborn as sns
 from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.preprocessing import *
 from xverse.transformer import WOE
-
+from sklearn.cluster import KMeans
 
 from sklearn.preprocessing import StandardScaler
 
@@ -1125,6 +1125,373 @@ def perform_woe_iv_feature_engineering(X_train,X_test, y_train):
         woe
     )
 
+#-----------------------------------------------
+# Calculate RFM Metrics
+#------------------------------------------- 
 
+def calculate_recency(df, customer_col, date_col, reference_date=None):
+    """
+    Calculate Recency (days since last transaction).
+    """
 
+    df_copy = df.copy()
+    df_copy[date_col] = pd.to_datetime(df_copy[date_col], errors="coerce")
+
+    if reference_date is None:
+        reference_date = df_copy[date_col].max()
+
+    recency = (
+        df_copy.groupby(customer_col)[date_col]
+        .max()
+        .reset_index()
+    )
+
+    recency["Recency"] = (reference_date - recency[date_col]).dt.days
+    recency = recency[[customer_col, "Recency"]]
+
+    return recency
+
+def calculate_frequency(df, customer_col):
+    """
+    Calculate Frequency (number of transactions per customer).
+    """
+
+    frequency = (
+        df.groupby(customer_col)
+        .size()
+        .reset_index(name="Frequency")
+    )
+
+    return frequency
+
+def calculate_monetary(df, customer_col, amount_col):
+    """
+    Calculate Monetary (total spend per customer).
+    """
+
+    monetary = (
+        df.groupby(customer_col)[amount_col]
+        .sum()
+        .reset_index()
+        .rename(columns={amount_col: "Monetary"})
+    )
+
+    return monetary
+
+def calculate_rfm(df, customer_col, date_col, amount_col, reference_date=None):
+    """
+    Compute full RFM table in one modular function.
+    """
+
+    recency = calculate_recency(df, customer_col, date_col, reference_date)
+    frequency = calculate_frequency(df, customer_col)
+    monetary = calculate_monetary(df, customer_col, amount_col)
+
+    # Merge all features
+    rfm = recency.merge(frequency, on=customer_col)
+    rfm = rfm.merge(monetary, on=customer_col)
+
+    return rfm
+
+def define_snapshot_date(df, date_col, method="dynamic", fixed_date=None):
+    """
+    Define snapshot date for RFM analysis.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Transaction dataset
+    date_col : str
+        Transaction date column
+    method : str
+        "fixed" or "dynamic"
+    fixed_date : str or datetime
+        Required if method="fixed"
+
+    Returns
+    -------
+    Timestamp
+        Snapshot date
+    """
+
+    df_copy = df.copy()
+    df_copy[date_col] = pd.to_datetime(df_copy[date_col], errors="coerce")
+
+    if method == "fixed":
+        if fixed_date is None:
+            raise ValueError("fixed_date must be provided for fixed method")
+        snapshot = pd.to_datetime(fixed_date)
+
+    elif method == "dynamic":
+        snapshot = df_copy[date_col].max() + pd.Timedelta(days=1)
+
+    else:
+        raise ValueError("method must be 'fixed' or 'dynamic'")
+
+    return snapshot
+
+#-----------------------------------------------
+# Cluster Customers
+#-------------------------------------------
+
+def scale_rfm_features(rfm_df, rfm_columns=None):
+    """
+    Scale RFM features using StandardScaler.
+
+    Parameters
+    ----------
+    rfm_df : pd.DataFrame
+        DataFrame containing RFM features
+    rfm_columns : list, optional
+        RFM columns to scale
+
+    Returns
+    -------
+    pd.DataFrame
+        Scaled RFM features
+    """
+
+    if rfm_columns is None:
+        rfm_columns = ["Recency", "Frequency", "Monetary"]
+
+    scaler = StandardScaler()
+
+    scaled_features = scaler.fit_transform(rfm_df[rfm_columns])
+
+    scaled_rfm = pd.DataFrame(
+        scaled_features,
+        columns=rfm_columns,
+        index=rfm_df.index
+    )
+
+    return scaled_rfm
+
+def perform_kmeans_clustering(
+    scaled_rfm,
+    n_clusters=3,
+    random_state=42
+):
+    """
+    Apply K-Means clustering.
+
+    Parameters
+    ----------
+    scaled_rfm : pd.DataFrame
+        Scaled RFM features
+    n_clusters : int
+        Number of clusters
+    random_state : int
+        Random seed for reproducibility
+
+    Returns
+    -------
+    tuple
+        (cluster_labels, fitted_model)
+    """
+
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        random_state=random_state,
+        n_init=10
+    )
+
+    cluster_labels = kmeans.fit_predict(scaled_rfm)
+
+    return cluster_labels, kmeans
+
+def add_cluster_labels(
+    rfm_df,
+    cluster_labels,
+    cluster_column="Customer_Segment"
+):
+    """
+    Add cluster labels to RFM dataframe.
+    """
+
+    rfm_clustered = rfm_df.copy()
+    rfm_clustered[cluster_column] = cluster_labels
+
+    return rfm_clustered
+
+def segment_customers_by_rfm(
+    rfm_df,
+    rfm_columns=None,
+    n_clusters=3,
+    random_state=42
+):
+    """
+    Complete RFM customer segmentation pipeline.
+    """
+
+    scaled_rfm = scale_rfm_features(
+        rfm_df,
+        rfm_columns
+    )
+
+    cluster_labels, model = perform_kmeans_clustering(
+        scaled_rfm,
+        n_clusters=n_clusters,
+        random_state=random_state
+    )
+
+    segmented_df = add_cluster_labels(
+        rfm_df,
+        cluster_labels
+    )
+
+    return segmented_df, model
+
+def summarize_segments(rfm_segmented):
+    """
+    Summarize RFM metrics by customer segment.
+    """
+
+    return (
+        rfm_segmented
+        .groupby("Customer_Segment")
+        [["Recency", "Frequency", "Monetary"]]
+        .mean()
+        .round(2)
+    )
+
+#-----------------------------------------------
+# Define and Assign the "High-Risk" Label
+#-------------------------------------------
+
+def summarize_clusters(rfm_segmented):
+    """
+    Calculate average RFM values for each cluster.
+
+    Parameters
+    ----------
+    rfm_segmented : pd.DataFrame
+        RFM dataframe containing Customer_Segment
+
+    Returns
+    -------
+    pd.DataFrame
+        Cluster summary statistics
+    """
+
+    cluster_summary = (
+        rfm_segmented
+        .groupby("Customer_Segment")
+        [["Recency", "Frequency", "Monetary"]]
+        .mean()
+        .round(2)
+    )
+
+    return cluster_summary
+
+def identify_high_risk_cluster(cluster_summary):
+    """
+    Identify the least engaged customer segment.
+
+    Parameters
+    ----------
+    cluster_summary : pd.DataFrame
+        Summary statistics for each cluster
+
+    Returns
+    -------
+    int
+        Cluster label corresponding to the high-risk segment
+    """
+
+    risk_score = (
+        cluster_summary["Frequency"] +
+        cluster_summary["Monetary"]
+    )
+
+    high_risk_cluster = risk_score.idxmin()
+
+    return high_risk_cluster
+
+def create_high_risk_target(
+    rfm_segmented,
+    high_risk_cluster
+):
+    """
+    Create binary target variable.
+
+    Parameters
+    ----------
+    rfm_segmented : pd.DataFrame
+        Customer RFM dataset with cluster labels
+    high_risk_cluster : int
+        Cluster identified as high risk
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataset with is_high_risk target column
+    """
+
+    rfm_target = rfm_segmented.copy()
+
+    rfm_target["is_high_risk"] = (
+        rfm_target["Customer_Segment"] == high_risk_cluster
+    ).astype(int)
+
+    return rfm_target
+
+def generate_high_risk_target(rfm_segmented):
+    """
+    End-to-end pipeline for generating
+    the is_high_risk target variable.
+    """
+
+    cluster_summary = summarize_clusters(rfm_segmented)
+
+    high_risk_cluster = identify_high_risk_cluster(
+        cluster_summary
+    )
+
+    rfm_target = create_high_risk_target(
+        rfm_segmented,
+        high_risk_cluster
+    )
+
+    return rfm_target, cluster_summary, high_risk_cluster
+
+#-----------------------------------------------
+# Integrate the Target Variable
+#-------------------------------------------
+
+def merge_high_risk_target(
+    main_df,
+    rfm_target_df,
+    customer_col="CustomerId"
+):
+    """
+    Merge is_high_risk target variable into the main dataset.
+
+    Parameters
+    ----------
+    main_df : pd.DataFrame
+        Main processed dataset
+    rfm_target_df : pd.DataFrame
+        RFM dataset containing is_high_risk
+    customer_col : str
+        Customer identifier column
+
+    Returns
+    -------
+    pd.DataFrame
+        Main dataset with is_high_risk target
+    """
+
+    # Keep only required columns
+    target_df = rfm_target_df[
+        [customer_col, "is_high_risk"]
+    ].drop_duplicates()
+
+    # Merge target into main dataset
+    merged_df = main_df.merge(
+        target_df,
+        on=customer_col,
+        how="left"
+    )
+
+    return merged_df
 
