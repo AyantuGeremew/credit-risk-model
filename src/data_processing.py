@@ -3,6 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from sklearn.impute import KNNImputer, SimpleImputer
+from sklearn.preprocessing import *
+from xverse.transformer import WOE
+
+
 from sklearn.preprocessing import StandardScaler
 
 def get_dataset_shape(df):
@@ -391,7 +396,6 @@ def missing_value_analysis(df, threshold=0.3, plot=True):
     - Columns with missing values
     - Imputation strategy suggestion
     - Optional visualization
-
     Parameters:
     ----------
     df : pd.DataFrame
@@ -400,7 +404,6 @@ def missing_value_analysis(df, threshold=0.3, plot=True):
         Threshold for high missing values (default 30%)
     plot : bool
         Whether to show heatmap
-
     Returns:
     -------
     pd.DataFrame
@@ -454,7 +457,6 @@ def missing_value_analysis(df, threshold=0.3, plot=True):
 def detect_outliers_iqr(df):
     """
     Detect outliers using the IQR method for numerical features.
-
     Returns a DataFrame showing:
     - Q1, Q3
     - IQR
@@ -539,7 +541,6 @@ def calculate_total_transaction_amount(df, customer_col, amount_col):
         Column containing customer IDs.
     amount_col : str
         Column containing transaction amounts.
-
     Returns:
     -------
     pd.DataFrame
@@ -555,7 +556,7 @@ def calculate_total_transaction_amount(df, customer_col, amount_col):
     
     return total_amount
 
-    def calculate_average_transaction_amount(df, customer_col, amount_col):
+def calculate_average_transaction_amount(df, customer_col, amount_col):
     """
     Calculate the average transaction amount for each customer.
 
@@ -876,6 +877,7 @@ def impute_missing_values(
     columns=None,
     n_neighbors=5
 ):
+
     """
     Unified function to handle missing value imputation.
 
@@ -921,6 +923,28 @@ def impute_missing_values(
 
     return df_copy
 
+
+def remove_missing_values(df, axis=0, how="any", threshold=None, subset=None):
+    """
+    Remove rows or columns with missing values.
+    """
+    df_copy = df.copy()
+    
+    # If a threshold is provided, pandas requires 'how' to be None
+    if threshold is not None:
+        df_copy = df_copy.dropna(
+            axis=axis,
+            thresh=threshold,
+            subset=subset
+        )
+    else:
+        df_copy = df_copy.dropna(
+            axis=axis,
+            how=how,
+            subset=subset
+        )
+        
+
 def remove_missing_values(
     df,
     axis=0,
@@ -960,6 +984,7 @@ def remove_missing_values(
         subset=subset
     )
 
+
     return df_copy
 
 def drop_missing_rows(df, how="any", subset=None):
@@ -970,6 +995,11 @@ def drop_missing_columns(df, how="any", threshold=None):
     """Drop columns with missing values."""
     return remove_missing_values(df, axis=1, how=how, threshold=threshold)
 
+
+#-----------------------------------------------
+# Normalize/Standardize Numerical Features
+#------------------------------------------- 
+
 def normalize_minmax(df, columns=None):
     """
     Normalize selected columns to range [0, 1].
@@ -994,40 +1024,107 @@ def normalize_minmax(df, columns=None):
         columns = df_copy.select_dtypes(include="number").columns
 
     scaler = MinMaxScaler()
+
+    df_copy[columns] = scaler.fit_transform(df_copy[columns])
+
+    return df_copy
+
+ 
+
+def normalize_minmax(df, columns=None):
+    """
+    Normalize selected columns to range [0, 1].
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    columns : list or None
+        Columns to standardize. If None, use all numeric columns.
+
+        Columns to normalize. If None, use all numeric columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        Standardized dataset
+
+        Normalized dataset
+    """
+
+    df_copy = df.copy()
+
+    # Auto-select numeric columns if not provided
+    if columns is None:
+        columns = df_copy.select_dtypes(include="number").columns
+
+    scaler = StandardScaler()
 
     df_copy[columns] = scaler.fit_transform(df_copy[columns])
 
     return df_copy
 
 #-----------------------------------------------
-# Normalize/Standardize Numerical Features
-#-------------------------------------------  
+# Feature Engineering with WoE and IV
+#------------------------------------------- 
 
-def normalize_minmax(df, columns=None):
+def perform_woe_iv_feature_engineering(X_train,X_test, y_train):
     """
-    Normalize selected columns to range [0, 1].
+    Apply WoE transformation and calculate Information Value (IV).
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Input dataset
-    columns : list or None
-        Columns to normalize. If None, use all numeric columns.
+    X_train : pd.DataFrame
+        Training feature dataset
+    X_test : pd.DataFrame
+        Testing feature dataset
+    y_train : pd.Series
+        Training target variable
 
     Returns
     -------
-    pd.DataFrame
-        Normalized dataset
+    tuple
+        (
+            X_train_woe,
+            X_test_woe,
+            iv_table,
+            fitted_woe_transformer
+        )
     """
 
-    df_copy = df.copy()
+    # Initialize WoE transformer
+    woe = WOE()
 
-    # Select numeric columns if not provided
-    if columns is None:
-        columns = df_copy.select_dtypes(include="number").columns
+    # Fit on training data only
+    woe.fit(X_train, y_train)
 
-    scaler = MinMaxScaler()
+    # Transform datasets
+    X_train_woe = woe.transform(X_train)
+    X_test_woe = woe.transform(X_test)
 
-    df_copy[columns] = scaler.fit_transform(df_copy[columns])
+    # Extract Information Value (IV)
+    iv_table = (
+        woe.iv_df.reset_index()
+        .rename(
+            columns={
+                "index": "Feature",
+                "Information_Value": "IV"
+            }
+        )
+        .sort_values(
+            by="IV",
+            ascending=False
+        )
+        .reset_index(drop=True)
+    )
 
-    return df_copy
+    return (
+        X_train_woe,
+        X_test_woe,
+        iv_table,
+        woe
+    )
+
+
+
+
