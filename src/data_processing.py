@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -6,6 +7,8 @@ from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.preprocessing import *
 from xverse.transformer import WOE
 
+
+from sklearn.preprocessing import StandardScaler
 
 def get_dataset_shape(df):
     """
@@ -393,7 +396,6 @@ def missing_value_analysis(df, threshold=0.3, plot=True):
     - Columns with missing values
     - Imputation strategy suggestion
     - Optional visualization
-
     Parameters:
     ----------
     df : pd.DataFrame
@@ -402,7 +404,6 @@ def missing_value_analysis(df, threshold=0.3, plot=True):
         Threshold for high missing values (default 30%)
     plot : bool
         Whether to show heatmap
-
     Returns:
     -------
     pd.DataFrame
@@ -456,7 +457,6 @@ def missing_value_analysis(df, threshold=0.3, plot=True):
 def detect_outliers_iqr(df):
     """
     Detect outliers using the IQR method for numerical features.
-
     Returns a DataFrame showing:
     - Q1, Q3
     - IQR
@@ -541,7 +541,6 @@ def calculate_total_transaction_amount(df, customer_col, amount_col):
         Column containing customer IDs.
     amount_col : str
         Column containing transaction amounts.
-
     Returns:
     -------
     pd.DataFrame
@@ -872,7 +871,13 @@ def label_encode_multiple(df, columns):
 # Handling Missing Values
 #-------------------------------------------  
 
-def impute_missing_values(df, strategy="mean", columns=None, n_neighbors=5):
+def impute_missing_values(
+    df,
+    strategy="mean",
+    columns=None,
+    n_neighbors=5
+):
+
     """
     Unified function to handle missing value imputation.
 
@@ -918,6 +923,7 @@ def impute_missing_values(df, strategy="mean", columns=None, n_neighbors=5):
 
     return df_copy
 
+
 def remove_missing_values(df, axis=0, how="any", threshold=None, subset=None):
     """
     Remove rows or columns with missing values.
@@ -938,6 +944,47 @@ def remove_missing_values(df, axis=0, how="any", threshold=None, subset=None):
             subset=subset
         )
         
+
+def remove_missing_values(
+    df,
+    axis=0,
+    how="any",
+    threshold=None,
+    subset=None
+):
+    """
+    Remove rows or columns with missing values.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset
+    axis : int
+        0 = drop rows, 1 = drop columns
+    how : str
+        'any' -> drop if any missing
+        'all' -> drop if all missing
+    threshold : int or None
+        Require that many non-NA values to keep row/column
+    subset : list or None
+        Columns to consider when dropping rows
+
+    Returns
+    -------
+    pd.DataFrame
+        Cleaned dataset
+    """
+
+    df_copy = df.copy()
+
+    df_copy = df_copy.dropna(
+        axis=axis,
+        how=how,
+        thresh=threshold,
+        subset=subset
+    )
+
+
     return df_copy
 
 def drop_missing_rows(df, how="any", subset=None):
@@ -947,6 +994,7 @@ def drop_missing_rows(df, how="any", subset=None):
 def drop_missing_columns(df, how="any", threshold=None):
     """Drop columns with missing values."""
     return remove_missing_values(df, axis=1, how=how, threshold=threshold)
+
 
 #-----------------------------------------------
 # Normalize/Standardize Numerical Features
@@ -981,9 +1029,11 @@ def normalize_minmax(df, columns=None):
 
     return df_copy
 
-def standardize_data(df, columns=None):
+ 
+
+def normalize_minmax(df, columns=None):
     """
-    Standardize selected columns to mean = 0 and std = 1.
+    Normalize selected columns to range [0, 1].
 
     Parameters
     ----------
@@ -992,10 +1042,14 @@ def standardize_data(df, columns=None):
     columns : list or None
         Columns to standardize. If None, use all numeric columns.
 
+        Columns to normalize. If None, use all numeric columns.
+
     Returns
     -------
     pd.DataFrame
         Standardized dataset
+
+        Normalized dataset
     """
 
     df_copy = df.copy()
@@ -1070,4 +1124,7 @@ def perform_woe_iv_feature_engineering(X_train,X_test, y_train):
         iv_table,
         woe
     )
+
+
+
 
