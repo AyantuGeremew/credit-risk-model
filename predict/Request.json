@@ -1,0 +1,11 @@
+{
+    "Province": "Gauteng",
+    "VehicleType": "Passenger Vehicle",
+    "CoverType": "Comprehensive",
+    "Gender": "Male",
+    "SumInsured": 250000,
+    "CalculatedPremiumPerTerm": 1200,
+    "CustomValueEstimate": 220000,
+    "RegistrationYear": 2019,
+    "VehicleAge": 5
+  }

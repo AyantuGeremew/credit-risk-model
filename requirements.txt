@@ -1,4 +1,13 @@
-pandas 
-numpy
 seaborn
 matplotlib
+fastapi
+uvicorn
+pandas
+numpy
+scikit-learn
+mlflow
+pydantic
+python-multipart
+pytest
+flake8
+httpx

@@ -1,0 +1,17 @@
+version: "3.11"
+
+services:
+  risk-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: risk_prediction_api
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      - MLFLOW_TRACKING_URI=http://host.docker.internal:5000
+
+    restart: unless-stopped
